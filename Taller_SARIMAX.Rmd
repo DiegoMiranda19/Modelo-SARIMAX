@@ -6,12 +6,18 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,      
+  warning = FALSE,  
+  message = FALSE,  
+  error = FALSE     
+)
 ```
+
 
 ## **Introducción del dataset**
 
-Este archivo contiene datos sintéticos de ventas minoristas mensuales de una 
+Este archivo contiene datos sintéticos de ventas de tiendas minoristas mensuales de una 
 tienda ficticia, que abarca el período de enero de 2020 a diciembre de 2023 
 (4 años).
 
@@ -26,9 +32,45 @@ https://www.kaggle.com/code/muhammadzamin1/sales-forcasting/input
 | Promotion    | Bandera binaria (1 = campaña promocional activa, 0 = sin promoción)  |
 | HolidayMonth | Bandera binaria (1 = mes festivo, p. ej., diciembre, 0 = mes normal) |
 
-### **Librerias necesarias para el taller**
+#### **Librerias necesarias para el taller**
 
 ```{r}
-
+library(readr)
+library(TSA)
+library(forecast)
 ```
 
+#### **Lectura de los datos**
+
+```{r}
+Datos <- read_csv2("Datos/retail_sales_mock_data.csv") #función para leer csv sep;
+```
+El Dataset contiene dos variables exogenas, "Promotion" y "HolidayMonth", estas
+dos columnas pueden servirnos como exogenas para nuestro modelo. Para efectos
+de este ejercicio solo usaremos la exogena "Promotion"
+
+
+#### **Serie de la variable objetivo y la exogena**
+```{r}
+Total = ts(Datos[1:48,2], start =2020, frequency =12 )
+Promotion = ts(Datos[1:48,3], start =2020, frequency =12 )
+```
+
+```{r}
+plot(Total,col="6", ann=FALSE)
+points(y=Total,x=time(Total),pch=as.vector(season(Total)),col="4")
+title(main="Serie de ventas de tiendas minoristas", col.main="blue", font.main=2)
+title(xlab="Fecha: Mes/Anio")
+title(ylab="Ventas")
+```
+```{r}
+monthplot(Total, col = "midnightblue")
+boxplot(Total~cycle(Total))
+```
+
+En el gráfico de líneas de la serie original se observa un patrón estacional claramente definido entre los mismos meses de diferentes años. Por ejemplo, los meses identificados con la letra “D” presentan picos altos, mientras que en mayo, junio y julio se evidencian caídas. Esto permite concluir que la serie no sigue un comportamiento aleatorio, sino que responde a patrones estacionales marcados.
+
+Además, se aprecia una ligera tendencia creciente. Aunque los picos mensuales se repiten de manera cíclica cada año, estos parecen ser gradualmente más altos con el paso del tiempo. Este comportamiento sugiere una tendencia positiva en la serie, lo que podría indicar que no es estacionaria en media. En ese caso, podría ser necesario aplicar una diferenciación regular para estabilizarla.
+En cuanto a la estacionariedad en varianza, visualmente la serie tampoco parece cumplir esta condición, ya que los picos y valles —que se repiten anualmente— no muestran una variabilidad constante. Más bien, dicha variabilidad tiende a aumentar con el tiempo.
+
+Esta interpretación se refuerza con el boxplot, donde se observa con claridad la estacionalidad de la serie: los valores aumentan desde agosto hasta enero y descienden desde febrero hasta alcanzar sus niveles más bajos en junio y julio. Asimismo, se nota una alta variabilidad entre los meses. Resulta particularmente llamativo el comportamiento de mayo (mes 5), cuya caja es más amplia respecto a la de junio, lo cual podría indicar que en algunos años las ventas de ese mes fueron muy buenas y en otros muy bajas. Finalmente, en diciembre (mes 12) se aprecia el posible efecto “Navidad”, cuya intensidad varía de un año a otro.
