@@ -401,7 +401,8 @@ normal)</td>
 <h4><strong>Librerias necesarias para el taller</strong></h4>
 <pre class="r"><code>library(readr)
 library(TSA)
-library(forecast)</code></pre>
+library(forecast)
+library(tseries)</code></pre>
 </div>
 <div id="lectura-de-los-datos" class="section level4">
 <h4><strong>Lectura de los datos</strong></h4>
@@ -411,8 +412,9 @@ library(forecast)</code></pre>
 nuestro modelo. Para efectos de este ejercicio solo usaremos la exogena
 “Promotion”</p>
 </div>
-<div id="serie-de-la-variable-objetivo-y-la-exogena" class="section level4">
-<h4><strong>Serie de la variable objetivo y la exogena</strong></h4>
+<div id="serie-de-la-variable-objetivo-y-la-exogena-exploración-inicial" class="section level4">
+<h4><strong>Serie de la variable objetivo y la exogena, exploración
+inicial</strong></h4>
 <pre class="r"><code>Total = ts(Datos[1:48,2], start =2020, frequency =12 )
 Promotion = ts(Datos[1:48,3], start =2020, frequency =12 )</code></pre>
 <pre class="r"><code>plot(Total,col=&quot;6&quot;, ann=FALSE)
@@ -451,6 +453,44 @@ podría indicar que en algunos años las ventas de ese mes fueron muy
 buenas y en otros muy bajas. Finalmente, en diciembre (mes 12) se
 aprecia el posible efecto “Navidad”, cuya intensidad varía de un año a
 otro.</p>
+<p>Todo lo anterior, en el contexto del mercado minorista, resulta
+completamente coherente. Si consideramos, por ejemplo, que los datos
+provienen de una tienda que comercializa productos navideños o de alta
+demanda en determinadas épocas del año, es lógico que las ventas
+comiencen a aumentar después de julio y alcancen su punto máximo hacia
+diciembre. Posteriormente, al llegar enero, se observa una rápida caída.
+Este comportamiento refleja dinámicas comerciales reales y permite
+identificar patrones estacionales claros dentro de los datos.</p>
+</div>
+<div id="introducción-al-modelamiento-ajustes-al-modelo-box---jenkins" class="section level3">
+<h3><strong>Introducción al modelamiento, ajustes al modelo Box -
+Jenkins</strong></h3>
+<pre class="r"><code>ndiffs(Total) #Detecta automaticamente cuantas diferencias ordinarias pueden se necesarias</code></pre>
+<pre><code>## [1] 0</code></pre>
+<pre class="r"><code>nsdiffs(Total) #Detecta automaticamente cuantas diferencias estacionales pueden se necesarias</code></pre>
+<pre><code>## [1] 1</code></pre>
+<p>Al aplicar las pruebas de diferenciación regular y diferenciación
+estacional, se obtiene un valor de 0 para la diferenciación regular, lo
+cual sugiere que, matemáticamente, la serie es estacionaria en media.
+Esto indica que, aunque visualmente se apreciaba una ligera tendencia
+creciente en el gráfico de líneas, no existe un crecimiento o
+decrecimiento lo suficientemente significativo como para requerir alguna
+transformación adicional. Por otro lado, la diferenciación estacional
+presenta un valor de 1, lo que confirma el patrón observado visualmente:
+existe una relación estacional entre los mismos meses de distintos años.
+En consecuencia, es apropiado aplicar una diferenciación estacional de
+orden 1, o más si fuera necesario, para capturar adecuadamente dicha
+estacionalidad.</p>
+<div id="realizar-prueba-de-dickey-fuller-aumentada-adf" class="section level4">
+<h4><strong>Realizar prueba de Dickey-Fuller aumentada
+(ADF)</strong></h4>
+<ul>
+<li>Hipótesis nula (H<sub>0</sub>): La serie <strong>no es
+estacionaria</strong></li>
+<li>Hipótesis alternativa (H<sub>1</sub>): La serie es
+<strong>estacionaria</strong></li>
+</ul>
+</div>
 </div>
 </div>
 
