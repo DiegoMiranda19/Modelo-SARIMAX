@@ -1,0 +1,34 @@
+---
+title: "Taller SARIMAX - Series de tiempo , **Maestria en inteligencia de negocios**"
+author: "Diego Hernando Miranda Jimenez"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **Introducción del dataset**
+
+Este archivo contiene datos sintéticos de ventas minoristas mensuales de una 
+tienda ficticia, que abarca el período de enero de 2020 a diciembre de 2023 
+(4 años).
+
+La ubicación del dataset, se encuentra en: 
+https://www.kaggle.com/code/muhammadzamin1/sales-forcasting/input
+
+
+| Columna      | Descripción                                                          |
+|--------------|----------------------------------------------------------------------|
+| Date         | Primer día de cada mes (formato: AAAA-MM-DD)                         |
+| SalesAmount  | Importe total de ventas mensuales (con estacionalidad y tendencia)   |
+| Promotion    | Bandera binaria (1 = campaña promocional activa, 0 = sin promoción)  |
+| HolidayMonth | Bandera binaria (1 = mes festivo, p. ej., diciembre, 0 = mes normal) |
+
+### **Librerias necesarias para el taller**
+
+```{r}
+
+```
+
