@@ -15,7 +15,7 @@ knitr::opts_chunk$set(
 ```
 
 
-## **Introducción del dataset**
+### **Introducción del dataset**
 
 Este archivo contiene datos sintéticos de ventas de tiendas minoristas mensuales de una 
 tienda ficticia, que abarca el período de enero de 2020 a diciembre de 2023 
@@ -101,7 +101,131 @@ Al obtener un **p-value**, menor que 0.05, rechazamos la hipótesis nula y acept
 ```{r}
 autoplot(acf(Total, plot = FALSE,lag=48))
 ```
+
+En cuanto a la función de autocorrelación (ACF), se evidencia claramente una relación significativa en los rezagos 12, 24 y 36. Esto refuerza la idea de una marcada estacionalidad anual, donde la serie presenta correlación positiva con los valores ocurridos hace 1, 2 y 3 años.
+En sentido contrario, los rezagos 6, 18 y 30 muestran una correlación negativa, lo que indica una relación inversa con los periodos mencionados. Dicho de otro modo, si en diciembre (lag 12) se presenta un pico alto, en junio (lag 6) se observa un punto bajo. La ACF refleja, por tanto, lo que en el ámbito del retail marketing se conoce como “temporada alta” y “temporada baja”.
+Además, se observa que la  función de autocorrelación decae lentamente y las barras comienzan a ingresar dentro del intervalo de confianza. Este comportamiento podría sugerir la conveniencia de incluir una diferencia ordinaria en los modelos propuestos más adelante, incluso si la prueba ADF indicó que no era necesaria y que la serie era estacionaria. Este supuesto será verificado posteriormente en la etapa de proposición de modelos.
+
+
 ```{r}
 autoplot(pacf(Total, plot = FALSE, lag = 48))
 ```
 
+En la función de autocorrelación parcial (PACF), se observa que la barra correspondiente al rezago 1 sobresale significativamente de las bandas de confianza. Esto sugiere la presencia de un término autorregresivo de orden 1 (AR(1)), lo que indicaría que el valor del mes actual depende directamente del valor del mes inmediatamente anterior. Estos supuestos se considerarán en la etapa de proposición de modelos.
+Asimismo, podría plantearse la incorporación de un valor $P$ para la componente estacional, dado que el rezago 12 se encuentra cercano al límite de la banda de confianza. Este aspecto también será evaluado en la mencionada etapa de modelamiento donde podriamos probar con un model de orden $P$ = 1 o $P$ = 0
+
+#### **Diferenciando la serie una vez de manera estacional"**
+
+```{r}
+diff.Total<-diff(Total, lag = 12)
+autoplot(diff.Total, ts.colour = "darkorange4", ts.linetype = "dashed")
+autoplot(acf(diff.Total, plot = FALSE,lag=24))
+```
+
+Con base en lo anterior, se concluye que al aplicar una diferencia estacional a la serie de ventas de tiendas minoristas del canal retail, es posible capturar el patrón observado en los rezagos 12, 24 y 36, eliminando en gran medida la componente anual. Aunque el “limpiamiento” del patrón no fue completo, las barras de la función de autocorrelación se encuentran dentro de las bandas de confianza, lo que indica que la estacionalidad fue adecuadamente atenuada.
+
+### **Propuesta de modelos**
+
+En el siguiente apartado se propondrán tres modelos SARIMA, basados en la experiencia y en la información obtenida del análisis de la serie en los pasos anteriores. El objetivo es identificar, al menos, dos modelos que superen satisfactoriamente la verificación de los residuos y, entre estos, seleccionar el modelo ganador considerando la menor varianza residual, los menores criterios de información o el menor error cuadrático medio (ECM) en sus pronósticos.
+Posteriormente, se estimarán los parámetros de cada modelo y, sobre el modelo ganador, se incorporará la **variable exógena Promotion**, convirtiéndolo así en un modelo **SARIMAX.**
+
+```{r}
+fit1 <- Arima(Total, order = c(1, 0, 1), seasonal = c(0, 1, 1))
+fit2 <- Arima(Total, order = c(1, 0, 0), seasonal = c(1, 1, 0))
+fit3 <- Arima(Total, order = c(0, 0, 1), seasonal = c(0, 1, 1))
+```
+
+```{r}
+# Comparación de Criterios de Información (Menor es mejor)
+comparativa_criterios <- data.frame(
+  Modelo = c("M1: (1,0,1)(0,1,1)", "M2: (1,0,0)(1,1,0)", "M3: (0,0,1)(0,1,1)"),
+  AIC = c(fit1$aic, fit2$aic, fit3$aic),
+  BIC = c(fit1$bic, fit2$bic, fit3$bic)
+)
+print(comparativa_criterios)
+
+```
+
+```{r}
+# Unir las precisiones en una sola tabla
+precis_m1 <- accuracy(fit1)
+precis_m2 <- accuracy(fit2)
+precis_m3 <- accuracy(fit3)
+
+tabla_accuracy <- rbind(precis_m1, precis_m2, precis_m3)
+rownames(tabla_accuracy) <- c("Modelo 1", "Modelo 2", "Modelo 3")
+print(tabla_accuracy)
+```
+Para la validación y selección del modelo, primero realizamos una comparación de AIC/BIC, en este punto vemos que el modelo 1, tiene el **AIC** más bajo 636.79, esto podría indicar que este modelo es el que mejor balancea el ajuste con la complejidad.
+
+EL modelo 2 tiene el **BIC** más bajo, esto podría ser engañoso si no revisamos otras metricas del modelo como por ejemplo su RMSE o su MAPE.
+
+Respeto al análisis de preción vemos que el modelo 1 toma distancia totalmente de los otros dos modelos:
+
+- **RMSE (Error Cuadrático Medio):** El Modelo 1 tiene 1192.8, significativamente menor al ~1300 de los otros.
+
+- **MAPE (Error Porcentual Medio):** El Modelo 1 tiene un error del 6.00%, mientras que los demás superan el 6.8% - 7%.
+
+#### **Validación de residuales**
+
+Ahora ya que tenemos claro cual es nuestro modelo lider **(Modelo 1)**, haremos pruebas en los residuales para verificar que cumplan con las premisas de los residuales en series de tiempo. Los dos modelos **SARIMA** propuestos para ser testeados en los residuales y del cual saldrá el modelo ganador para el pronostico serán el **modelo 1** (modelo ganador por criterios de información y accuracy) y el **modelo 3** el cual tuvo también un comportamiento interesante, esto en pro de hacer el testeo propuesto en el taller sobre dos modelos **SARIMA** y que sus residuales pasen las pruebas.
+
+##### **Modelo 1:**
+
+```{r}
+# Diagnóstico completo para el Modelo 1
+checkresiduals(fit1)
+```
+
+Se aplicó el test de **Ljung-Box** sobre los residuales del **Modelo 1** para verificar el supuesto de independencia. Se obtuvo un estadístico $Q^* = 9.8951$ con un p-valor de 0.1946. Dado que este valor es superior al nivel de significancia $\alpha = 0.05$, no existe evidencia estadística suficiente para rechazar la hipótesis nula de independencia. Por lo tanto, se confirma que los residuales se comportan como ruido blanco, validando la estructura del modelo para fines de predicción
+
+También en las graficas vemos que los residuales en su grafica de ACF, están todos dentro de las bandas de confianza, además en el histograma se observa que los errores están situados en su mayoria sobre cero, cumpliendo también este supuesto.
+
+La varianza parece ser constante y no muestra variabilidad constante, el modelo parece también cumplir con este supuesto.
+
+##### **Modelo 3**
+
+```{r}
+# Diagnóstico completo para el Modelo 1
+checkresiduals(fit3)
+```
+
+Se realizó el diagnóstico de los residuales para el **Modelo 3**. El test de **Ljung-Box** arrojó un estadístico $Q^* = 8.106$ con un p-valor de 0.4232. Al ser este valor significativamente superior al umbral de $0.05$, se concluye que no existe autocorrelación serial en los errores y no existe evidencia estadistica suficiente para rechazar la hipótesis nula, por ende la aceptamos. Cabe destacar que este modelo presenta el mayor p-valor entre los candidatos, lo que indica una excelente captura de la estructura de autocorrelación de la serie, convirtiéndolo en un segundo candidato muy confiable.
+
+También en las graficas vemos que los residuales en su grafica de ACF, están todos dentro de las bandas de confianza, además en el histograma se observa que los errores están situados en su mayoria sobre cero, cumpliendo también este supuesto.
+
+La varianza parece ser constante y no muestra variabilidad constante, el modelo parece también cumplir con este supuesto.
+
+### **El modelo ganador**
+
+Luego de evaluar múltiples modelos, realizar pruebas, validaciones estadísticas y un análisis detallado de su estructura de correlación, estacionalidad y estacionariedad, se seleccionó el **Modelo 1** como el mejor candidato para generar los pronósticos. Esta elección se fundamenta en que presenta los valores más bajos en los criterios AIC, RMSE y MAPE, superando así el desempeño de los otros dos modelos, además de cumplir con los supuestos en los residuales.
+
+En consecuencia, el Modelo 1 será el candidato principal para la etapa de pronóstico, sobre el cual se incorporará la variable exógena Promotion, convirtiéndolo en un modelo SARIMAX.
+
+#### ***Escritura matematica del modelo 1***
+
+\begin{equation}
+(1 - \phi_1 B) (1 - B^{12})Y_t = \beta Promotion + (1 + \theta_1 B)(1 + \Theta_1 B^{12}) \epsilon_t
+\end{equation}
+
+**Definición de Convenciones y Operadores:**
+
+$Y_t$: Representa la serie de ventas minoristas en el tiempo $t$.
+
+$X_t$: Es la variable exógena Promotion en el tiempo $t$.
+
+$B$: Es el operador de rezago, definido como $B^k Y_t = Y_{t-k}$.
+
+$(1 - B^{12})$: Es el operador de diferencia estacional ($D=1$), aplicado para estabilizar la serie eliminando la estacionalidad anual.
+
+$\phi_1$: Es el parámetro autorregresivo de orden 1 (AR1).
+
+$\theta_1$: Es el parámetro de media móvil de la parte regular (MA1).
+
+$\Theta_1$: Es el parámetro de media móvil de la parte estacional (SMA1).
+
+$\beta$: Es el coeficiente de regresión que mide el impacto de las promociones sobre las ventas.
+
+$\epsilon_t$: Es el término de error aleatorio o ruido blanco, donde $\epsilon_t \sim N(0, \sigma^2)$.
+
+### **Pronosticos y validación cruzada**
