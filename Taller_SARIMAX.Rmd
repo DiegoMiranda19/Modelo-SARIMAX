@@ -186,7 +186,7 @@ La varianza parece ser constante y no muestra variabilidad constante, el modelo 
 ##### **Modelo 3**
 
 ```{r}
-# Diagnóstico completo para el Modelo 1
+# Diagnóstico completo para el Modelo 3
 checkresiduals(fit3)
 ```
 
@@ -229,3 +229,83 @@ $\beta$: Es el coeficiente de regresión que mide el impacto de las promociones 
 $\epsilon_t$: Es el término de error aleatorio o ruido blanco, donde $\epsilon_t \sim N(0, \sigma^2)$.
 
 ### **Pronosticos y validación cruzada**
+
+Durante la etapa anterior, definimos y seleccionamos el modelo 1 como candidato y modelo ganador para ser utilizado en la fase de predicciones y validaciones. Partimos de este modelo debido a su bajo MAPE y RMSE en comparación con los demás modelos, además de presentar valores de criterios de información muy similares a los restantes.
+
+En esta nueva etapa de experimentación, con el objetivo de comparar el desempeño predictivo, el MAPE, el RMSE y otras métricas de rendimiento (incluyendo ahora la variable regresora exógena), emplearemos de manera experimental los modelos 1 y 3, previamente explorados y validados.
+
+A continuación, se tomarán los modelos 1 y 3 para realizar pronósticos y validación cruzada con los datos intramuestrales, dividiendo el conjunto de datos en proporciones de entrenamiento y prueba.
+
+Para este ejercicio, se decidió entrenar los modelos dividiendo la muestra de la siguiente manera:
+
+- 3 años (36 meses) para el entrenamiento.
+
+- 1 año (12 meses) para la prueba.
+
+Esto se definió considerando que el conjunto de datos cuenta con un total de 48 meses de información. En consecuencia, se crearán los conjuntos de entrenamiento y prueba tanto para la variable objetivo (Ventas) como para la variable exógena (Promoción).
+
+```{r}
+# Preparación de Datos: División Train/Test
+# Variable Objetivo (Ventas)
+train_y <- window(Total, end = c(2022, 12))
+test_y  <- window(Total, start = c(2023, 1))
+
+# Variable Exógena (Promotion)
+train_x <- window(Promotion, end = c(2022, 12))
+test_x  <- window(Promotion, start = c(2023, 1))
+```
+
+Posterior a tener los datos divididos en test y prueba, procedemos a a crear nuestro modelos SARIMAX, usando la regresora exogena $Promotion$ para el *modelo 1* y *modelo 3*, previamente revisados en este taller y revisados según los supuestos establecidos.
+
+```{r}
+#Ajuste de Modelos SARIMAX (Usando xreg Promotion)
+
+# Modelo 1: SARIMAX(1,0,1)(0,1,1)[12]
+fit1_x <- Arima(train_y, order = c(1, 0, 1), 
+                seasonal = list(order = c(0, 1, 1), period = 12), 
+                xreg = train_x,
+                method = "ML")
+
+# Modelo 3: SARIMAX(0,0,1)(0,1,1)[12]
+fit3_x <- Arima(train_y, order = c(0, 0, 1), 
+                seasonal = list(order = c(0, 1, 1), period = 12), 
+                xreg = train_x,
+                method = "ML")
+```
+
+En el fragmento de código anterior durante el ajuste de los modelos SARIMAX sobre el conjunto de entrenamiento, se presentó un error de no-estacionariedad en la parte AR. Esto ocurrió porque el método de estimación por defecto (CSS) no lograba converger a una solución estable debido al tamaño reducido de la muestra de entrenamiento (36 datos) y la inclusión de la variable exógena. El problema se resolvió cambiando el método de estimación a Máxima Verosimilitud (ML), el cual es más robusto y asegura que los parámetros estimados mantengan la estabilidad del sistema.
+
+El error que aparecia inicialmente, antes de agregar el paramentro $method="ML"$, era:
+
+Error en stats::arima(x = x, order = order, seasonal = seasonal, xreg = xreg, : 
+  non-stationary AR part from CSS
+  
+Se resolvió efectivamente cambiando el método de estimaciómn por defecto que usa R
+*CSS* (Conditional Sum of Squares) a *ML* (Exact Maximun likelihood)
+
+Ahora, procederemos a generar los pronósticos fuera de la muestra utilizando los datos de prueba requiere que el modelo conozca la información de la variable exógena. Es fundamental que el modelo sepa si existen promociones en los datos de testeo para poder realizar correctamente las predicciones y la validación de los modelos.
+
+```{r}
+fc1_x <- forecast(fit1_x, xreg = test_x)
+fc3_x <- forecast(fit3_x, xreg = test_x)
+```
+
+```{r}
+#Tabla Comparativa de Métricas (ECM/RMSE y MAPE)
+res_m1 <- accuracy(fc1_x, test_y)
+res_m3 <- accuracy(fc3_x, test_y)
+
+tabla_final <- rbind(
+  res_m1[1, c("RMSE", "MAPE")], # M1 Train
+  res_m1[2, c("RMSE", "MAPE")], # M1 Test
+  res_m3[1, c("RMSE", "MAPE")], # M3 Train
+  res_m3[2, c("RMSE", "MAPE")]  # M3 Test
+)
+rownames(tabla_final) <- c("SARIMAX 1 (Train)", "SARIMAX 1 (Test)", 
+                           "SARIMAX 3 (Train)", "SARIMAX 3 (Test)")
+print("Resumen de Métricas de Pronóstico:")
+print(tabla_final)
+```
+
+*Análisis de Validación Cruzada y Poder Predictivo:*
+Para este análisis, se reservaron 12 meses (un año completo) como muestra de prueba (test), lo que representa el 25% de los datos totales. Esta elección es estratégica, ya que permite evaluar si el modelo es capaz de capturar un ciclo estacional completo (enero a diciembre) sin conocer los valores reales.
