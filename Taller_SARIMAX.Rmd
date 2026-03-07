@@ -39,6 +39,7 @@ library(readr)
 library(TSA)
 library(forecast)
 library(tseries)
+library(ggplot2)
 ```
 
 #### **Lectura de los datos**
@@ -307,5 +308,112 @@ print("Resumen de Métricas de Pronóstico:")
 print(tabla_final)
 ```
 
-*Análisis de Validación Cruzada y Poder Predictivo:*
+**Análisis de Validación Cruzada y Poder Predictivo:**
+
 Para este análisis, se reservaron 12 meses (un año completo) como muestra de prueba (test), lo que representa el 25% de los datos totales. Esta elección es estratégica, ya que permite evaluar si el modelo es capaz de capturar un ciclo estacional completo (enero a diciembre) sin conocer los valores reales.
+
+1. Superioridad del Modelo 1: El SARIMAX 1 es claramente el ganador en términos de poder predictivo. Su error porcentual en la muestra de testeo (3.46%) es significativamente menor al del Modelo 3 (6.13%).
+
+2. Estabilidad del Error: Observamos que en el Modelo 1, la diferencia entre el MAPE de entrenamiento (2.95%) y el de testeo (3.46%) es pequeña. Esto indica que el modelo no tiene sobreajuste (overfitting) y generaliza muy bien ante datos nuevos.
+
+3. Precisión del Modelo 3: Aunque el Modelo 3 pasó las pruebas de residuales, su capacidad de pronóstico es inferior, con un RMSE de 1092.19 frente a los 732.78 del Modelo 1.
+
+**Justificación Final del Modelo Adecuado**
+
+El modelo seleccionado como definitivo es el SARIMAX $(1,0,1)(0,1,1)_{12}$ con la variable exógena $Promotion$. Las razones que lo validan son:
+
+- Poder Predictivo: Presentó el menor error fuera de la muestra (MAPE de 3.46%), lo que garantiza pronósticos más confiables para la toma de decisiones de negocio.
+
+- Estructura Completa: A diferencia del Modelo 3, el Modelo 1 incluye un componente AR(1). Los resultados demuestran que el valor del mes anterior es un predictor crítico para las ventas de esta tienda.
+
+- Impacto de la Exógena: Al incluir Promotion, el modelo logra explicar variaciones que el componente estacional por sí solo no capturaba, reduciendo el error global.
+
+```{r}
+# Visualización de la Validación
+autoplot(Total, main = "Validación Cruzada: Datos Reales vs Pronósticos SARIMAX", 
+         ylab = "Ventas", xlab = "Tiempo") +
+  autolayer(fc1_x, series = "SARIMAX 1 (Pronóstico)", PI = FALSE, linetype = "dashed") +
+  autolayer(fc3_x, series = "SARIMAX 3 (Pronóstico)", PI = FALSE, linetype = "dotted") +
+  autolayer(test_y, series = "Datos Reales (Test)", lwd = 1.1) +
+  theme_minimal() +
+  scale_color_manual(values = c("black", "blue", "red"))
+```
+
+El gráfico muestra claramente cómo el SARIMAX 1 (línea azul punteada) tiene una capacidad superior para seguir la trayectoria de los Datos Reales (línea negra) en el periodo de 2023, especialmente capturando la magnitud de los picos y las caídas estacionales mejor que el Modelo 3.
+
+Para el caso de la variable exogena $Promotion$, valdría la pena entender su coeficiente y su interpretación e impacto en la serie, tanto desde el punto de vista mátematico como de la inteligencia de negocios, para eso ejecutamos el siguiente comando:
+
+```{r}
+summary(fit1_x)
+```
+El análisis del modelo SARIMAX revela que la variable exógena Promotion tiene un impacto positivo y estadísticamente significativo sobre las ventas minoristas. El coeficiente estimado de 2,889.76 indica que las campañas promocionales desplazan el nivel base de ventas hacia arriba en esa magnitud. Dado que el estadístico de prueba ($Z \approx 9.7$) es considerablemente alto, se concluye que la estrategia de promociones es un motor clave del rendimiento comercial, aportando una mejora sustancial en la precisión del pronóstico al capturar variaciones que no dependen únicamente del ciclo estacional anual."
+
+$$Z = \frac{2889.76}{297.78} = 9.704$$
+Para finalizar, y aprovechando la totalidad de los datos disponibles (4 años), se generará un pronóstico para un ciclo estacional completo de 12 meses, proyectando los valores correspondientes al año 2024. De esta manera, se obtendrán estimaciones para los próximos 12 meses.
+
+Además, será necesario definir una estrategia de $Promoción$ para el año a pronosticar, ya que el modelo requiere conocer en qué meses se implementarán las campañas promocionales planificadas para el próximo año.
+
+```{r}
+#Pronóstico Final para el próximo año (12 meses adelante)
+
+# Ajuste del modelo final con TODOS los datos históricos
+fit_final <- Arima(Total, order = c(1, 0, 1), 
+                   seasonal = list(order = c(0, 1, 1), period = 12), 
+                   xreg = Promotion,
+                   method = "ML")
+
+# Definición del calendario de promociones futuro (Escenario de negocio)
+# Supongamos que el equipo de marketing planea promociones en:
+# Marzo (3), Junio (6), Septiembre (9), Noviembre (11) y Diciembre (12)
+promo_futura <- c(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1)
+
+# Convertir a serie de tiempo para el pronóstico
+promo_futura_ts <- ts(promo_futura, start = c(2024, 1), frequency = 12)
+
+# 3. Generación del pronóstico
+pronostico_futuro <- forecast(fit_final, h = 12, xreg = promo_futura_ts)
+
+# 4. Visualización del pronóstico final
+library(ggplot2)
+autoplot(pronostico_futuro, 
+         main = "Pronóstico de Ventas Final (Modelo SARIMAX)",
+         ylab = "Ventas (Unidades/Pesos)", 
+         xlab = "Año") +
+  theme_minimal() +
+  autolayer(pronostico_futuro$mean, series = "Pronóstico", PI = FALSE) +
+  scale_color_manual(values = c("blue"))
+```
+
+**Captura de la dinámica comercial:** Se nota claramente cómo el modelo proyecta ventas respetando la estacionalidad (las caídas a mitad de año) y dispara las ventas al final del periodo proyectado, capturando el "efecto diciembre".
+
+**Impacto de las Promociones:** Los picos adicionales que se ven a lo largo del 2024 corresponden directamente a esos "1" que pusiste en tu vector promo_futura. El modelo sumó exitosamente esos $\approx 2889$ de tu coeficiente $\beta$ a la base estacional.
+
+**Incertidumbre (Intervalos de confianza):** Las sombras azules (al 80% y 95% de confianza) se van abriendo ligeramente a medida que avanza el año. Esto es un comportamiento matemáticamente correcto e ideal para un informe de Inteligencia de Negocios, ya que refleja que el futuro lejano tiene mayor incertidumbre que el futuro inmediato.
+
+### **Conclusiones y cierre**
+
+El desarrollo de este taller permitió proyectar exitosamente las ventas minoristas para el año 2024. Al transicionar de un análisis clásico de Box-Jenkins a un modelo SARIMAX, se logró no solo capturar la inercia histórica y la fuerte estacionalidad del sector retail (donde los picos de diciembre son evidentes), sino también cuantificar el impacto directo de las decisiones de negocio.
+
+El resultado más destacado a nivel comercial es la validación estadística de la variable exógena $Promotion$. El modelo determinó que la ejecución de campañas promocionales incrementa las ventas mensuales en un promedio de 2889.76 unidades/pesos, un hallazgo altamente significativo ($Z \approx 9.70$) que demuestra un retorno real sobre la inversión en marketing. Finalmente, el pronóstico proyectado respeta los ciclos estacionales y ajusta dinámicamente las estimaciones en los meses donde se planean futuras promociones.
+
+**Problemas Enfrentados y Soluciones implementadas**
+
+Durante el proceso de modelamiento y validación, surgieron diversos retos técnicos que requerían ajustes metodológicos:
+
+-**Inestabilidad Numérica en el Ajuste (Error de Estacionariedad AR):** Al realizar la validación cruzada y reducir la ventana de datos para el entrenamiento, la función Arima arrojó el error non-stationary AR part from CSS. Esto ocurrió porque el método de estimación por defecto (Conditional Sum of Squares) no lograba converger a una solución estable con una muestra pequeña. Solución: Se forzó al algoritmo a utilizar Máxima Verosimilitud Exacta (method = "ML"), un método más robusto que aseguró la estacionariedad y la correcta estimación de los parámetros.
+
+-**Complejidad Estacional y Varianza Creciente:** El análisis exploratorio inicial mostró que la serie no era estacionaria en varianza y tenía un fuerte componente cíclico. Solución: Se aplicó una diferencia estacional ($D=1$) con rezago 12 (lag = 12). Esto limpió la autocorrelación anual y permitió estabilizar el patrón sin necesidad de sobre-diferenciar la serie ordinariamente.
+
+-**Manejo del Ecosistema Gráfico en R:** Al generar las visualizaciones de pronóstico final, el sistema no reconocía las capas estéticas (theme_minimal()). Solución: Se identificó la dependencia de la librería ggplot2 dentro del ecosistema de forecast, y su importación explícita permitió generar gráficos limpios y con calidad de presentación ejecutiva.
+
+**Justificación de la Elección del Modelo 1**
+
+Tras evaluar tres estructuras candidatas, el Modelo 1 ($SARIMA(1,0,1)(0,1,1)_{12}$) fue seleccionado de manera concluyente como el mejor modelo predictivo, justificándose en los siguientes pilares:
+
+-**Principio de Parsimonia y Ajuste:** El Modelo 1 presentó el Criterio de Información de Akaike (AIC) más bajo (636.79) en comparación con los demás modelos, indicando que logra el mejor equilibrio entre la bondad de ajuste y la simplicidad matemática.
+
+-**Precisión y Poder Predictivo:** Durante la evaluación de las métricas de error en la muestra de entrenamiento, el Modelo 1 superó ampliamente a sus competidores, logrando el menor Error Cuadrático Medio (RMSE = 1192.8) y el menor Error Porcentual Absoluto Medio (MAPE = 6.00%). Además, en la validación cruzada (fuera de la muestra), demostró una capacidad predictiva excepcional con un MAPE de apenas 3.46%.
+
+-**Validación de Supuestos (Ruido Blanco):** El análisis de residuales confirmó la validez del modelo. La prueba de Ljung-Box arrojó un p-valor de 0.1946 (mayor a 0.05), lo que garantiza que los errores son independientes, no presentan autocorrelación y que el modelo ha logrado extraer toda la información sistemática de los datos.
+
+-**Realismo Comercial:** La inclusión del componente AR(1) permite que el modelo reconozca la "inercia" natural de las ventas mes a mes, un factor que el Modelo 3 (su competidor más cercano) omitía.
